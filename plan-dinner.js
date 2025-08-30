@@ -27,6 +27,8 @@ const ROLE_TAGS = {
 
 const ROLE_IDS = { protein: null, starch: null, veg: null };
 
+const CATEGORY_IDS = { dinner: null };
+
 async function main() {
     console.log(`[info] Base: ${BASE}`);
     console.log(`[info] Start: ${START_DATE}`);
@@ -69,8 +71,9 @@ async function main() {
     const proteinPool = roleRecipes.filter(r => r.roles.has(ROLE_TAGS.protein));
     const starchPool  = roleRecipes.filter(r => r.roles.has(ROLE_TAGS.starch));
     const vegPool     = roleRecipes.filter(r => r.roles.has(ROLE_TAGS.veg));
+    const dinnerOnly  = roleRecipes.filter(r => r.isDinner);
 
-    console.log(`[info] Pools -> complete:${completePool.length} protein:${proteinPool.length} starch:${starchPool.length} veg:${vegPool.length}`);
+    console.log(`[info] Pools -> complete:${completePool.length} protein:${proteinPool.length} starch:${starchPool.length} veg:${vegPool.length} dinner only:${dinnerOnly.length}`);
 
     // 3) Build date list and recent window
     const dates = rangeDays(START_DATE, DAYS);
@@ -197,6 +200,12 @@ async function getRoleLabeledRecipes() {
     const id = name =>
         (list.find(t => t.slug === name) || list.find(t => t.name === name))?.id;
 
+    const { list: catList } = await getCategoryObjects();
+    const dinnerCat = catList.find(c =>
+        (c.slug?.toLowerCase() === 'dinner') || (c.name?.toLowerCase() === 'dinner')
+    );
+    CATEGORY_IDS.dinner = dinnerCat?.id || CATEGORY_IDS.dinner;
+
     const proteinId = id(ROLE_TAGS.protein);
     const starchId  = id(ROLE_TAGS.starch);
     const vegId     = id(ROLE_TAGS.veg);
@@ -219,6 +228,7 @@ async function getRoleLabeledRecipes() {
 async function getRecipesByTagIds(tagIds) {
     const url = new URL(`${BASE}/api/recipes`);
     for (const id of tagIds) url.searchParams.append('tags', id);
+    if (CATEGORY_IDS.dinner) url.searchParams.append('categories', CATEGORY_IDS.dinner);
     url.searchParams.set('perPage', '200');
     // Try to include/expand tags if supported (ignored if not)
     url.searchParams.set('include', 'tags');
@@ -454,11 +464,23 @@ async function slimRecipeAsync(r, allowFetch = false) {
         if (set.has(norm(ROLE_TAGS.veg)))     roles.add(ROLE_TAGS.veg);
     }
 
+    // 5) Store categories
+    const cats = (r.categories || []).map(c => (c.slug || c.name || '').toLowerCase());
+    const isDinner = cats.includes('dinner');
+
     return {
         id:   r.id || r.slug || r.uid || r.recipeId || r._id,
         name: r.name || r.title || r.recipeName || '',
         roles,
+        isDinner,
     };
+}
+
+async function getCategoryObjects() {
+    const url = `${BASE}/api/organizers/categories?perPage=500&page=1`;
+    const data = await apiGET(url);
+    const items = data?.items || data || [];
+    return { list: items };
 }
 
 main().catch(err => {
