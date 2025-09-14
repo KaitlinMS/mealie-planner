@@ -130,7 +130,7 @@ async function main() {
 async function chooseDinnerForDate(ctx) {
     const { recentDinnerRecipeIds, completePool, proteinPool, starchPool, vegPool } = ctx;
 
-    // Prefer complete meals
+    // 1) Prefer complete meals, avoid recent repeats
     const completeCandidates = shuffled(completePool).filter(r => !recentDinnerRecipeIds.has(r.id));
     if (completeCandidates.length > 0) {
         const chosen = completeCandidates[0];
@@ -138,37 +138,64 @@ async function chooseDinnerForDate(ctx) {
         return [{ recipeId: chosen.id }];
     }
 
-    // Greedy set-cover over roles
-    const NEED = new Set([ROLE_TAGS.protein, ROLE_TAGS.starch, ROLE_TAGS.veg]);
-    const universe = shuffled(
-        Array.from(new Map(
-            [...proteinPool, ...starchPool, ...vegPool]
-                .filter(r => !recentDinnerRecipeIds.has(r.id))
-                .map(r => [r.id, r])
-        ).values())
-    );
+    // 2) Greedy cover for roles with "pure-role" preference at the end
+    const NEED = new Set(['role:protein','role:starch','role:vegetable']);
+
+    // Universe = any recipe that has at least one needed role, not recently used
+    const universe = Array.from(new Map(
+        [...proteinPool, ...starchPool, ...vegPool]
+            .filter(r => !recentDinnerRecipeIds.has(r.id))
+            .map(r => [r.id, r])
+    ).values());
 
     const picks = [];
     const used = new Set();
 
     while (NEED.size > 0) {
-        let best = null, bestGain = 0;
-        for (const r of universe) {
-            if (used.has(r.id)) continue;
-            const gain = countIntersect(r.roles, NEED);
-            if (gain > bestGain) { best = r; bestGain = gain; }
+        const needCount = NEED.size;
+
+        // Candidates that contribute something new
+        const contrib = universe.filter(r => !used.has(r.id) && rolesGain(r, NEED) > 0);
+
+        if (contrib.length === 0) break;
+
+        let best;
+
+        if (needCount === 1) {
+            // EXACTLY ONE ROLE LEFT → prefer "pure" single-role recipes for that role
+            const [neededRole] = [...NEED];
+            const pure = contrib.filter(r => isPureForNeeded(r, NEED));
+
+            if (pure.length > 0) {
+                // pick any pure candidate (fewest extras is guaranteed since extras == 0)
+                best = pure[Math.floor(Math.random() * pure.length)];
+            } else {
+                // fall back to any recipe that provides the needed role (even if it also has others)
+                const hasNeeded = contrib.filter(r => rolesHas(r, neededRole));
+                // prefer those with the *fewest* total roles to minimize overlap
+                hasNeeded.sort((a, b) => a.roles.size - b.roles.size || (Math.random() - 0.5));
+                best = hasNeeded[0];
+            }
+        } else {
+            // 2 or 3 roles left → prefer more coverage (gain 2 > gain 1), then fewer extras
+            contrib.sort((a, b) => byBestScore(a, b, NEED));
+            best = contrib[0];
         }
-        if (!best || bestGain === 0) break;
+
+        if (!best) break;
 
         picks.push(best);
         used.add(best.id);
-        for (const role of best.roles) NEED.delete(role);
+        // remove newly covered roles from NEED
+        for (const role of best.roles) if (NEED.has(role)) NEED.delete(role);
     }
 
+    // Require at least 2 roles covered (or switch to === 3 to be strict)
     if (coveredRoles(picks).size >= 2) {
         for (const r of picks) recentDinnerRecipeIds.add(r.id);
         return picks.map(r => ({ recipeId: r.id }));
     }
+
     return [];
 }
 
@@ -481,6 +508,26 @@ async function getCategoryObjects() {
     const data = await apiGET(url);
     const items = data?.items || data || [];
     return { list: items };
+}
+
+// ---- helpers for role logic ----
+function rolesHas(r, role) {
+    return r.roles && r.roles.has(role);
+}
+function rolesGain(r, NEED) {
+    let n = 0; for (const v of r.roles) if (NEED.has(v)) n++; return n;
+}
+function isPureForNeeded(r, NEED) {
+    // exactly one role on the recipe, and it's the needed one
+    return r.roles.size === 1 && rolesGain(r, NEED) === 1;
+}
+function byBestScore(a, b, NEED) {
+    // Prefer more gain (2 > 1), then fewer total roles (prefer single-role),
+    // then random-ish tie-breaker
+    const ga = rolesGain(a, NEED), gb = rolesGain(b, NEED);
+    if (ga !== gb) return gb - ga;
+    if (a.roles.size !== b.roles.size) return a.roles.size - b.roles.size;
+    return Math.random() - 0.5;
 }
 
 main().catch(err => {
