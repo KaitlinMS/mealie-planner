@@ -1,16 +1,24 @@
 {
   "name": "mealie-planner",
   "version": "1.0.0",
-  "description": "Mealie's meal planner doesn't meet my needs at all... so I'll make my own!",
+  "description": "Automated meal planning for Mealie - generates weekly dinner plans based on recipe role tags (protein, starch, vegetable)",
   "type": "module",
-  "main": "index.js",
+  "main": "plan-dinner.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
-  "keywords": [],
+  "keywords": [
+    "mealie",
+    "meal-planning",
+    "recipes"
+  ],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "dotenv": "^17.2.1"
+  },
+  "devDependencies": {
+    "vitest": "^3.0.0"
   }
 }

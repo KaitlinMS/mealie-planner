@@ -605,3 +605,25 @@ main().catch(err => {
     console.error('[fatal]', err);
     process.exit(1);
 });
+
+// ============================================================
+// TEST EXPORTS
+// ============================================================
+// These exports allow unit testing of pure functions without
+// needing to mock the Mealie API.
+
+export const _testExports = {
+    parseArgs,
+    matchesKeyword,
+    analyzeRecipe,
+    determineCategory,
+    PROTEIN_KEYWORDS_SUBSTANTIAL,
+    PROTEIN_KEYWORDS_MINOR,
+    STARCH_KEYWORDS,
+    VEGETABLE_KEYWORDS,
+    DESSERT_INDICATORS,
+    BREAKFAST_INDICATORS,
+    BAKED_GOOD_INDICATORS,
+    MAIN_DISH_INDICATORS,
+    SIDE_DISH_INDICATORS,
+};
