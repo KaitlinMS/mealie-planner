@@ -27,7 +27,7 @@ const ROLE_TAGS = {
 
 const ROLE_IDS = { protein: null, starch: null, veg: null };
 
-const CATEGORY_IDS = { dinner: null };
+const CATEGORY_IDS = { dinner: null, side: null };
 
 async function main() {
     console.log(`[info] Base: ${BASE}`);
@@ -231,7 +231,12 @@ async function getRoleLabeledRecipes() {
     const dinnerCat = catList.find(c =>
         (c.slug?.toLowerCase() === 'dinner') || (c.name?.toLowerCase() === 'dinner')
     );
+    const sideCat = catList.find(c =>
+        (c.slug?.toLowerCase() === 'side') || (c.name?.toLowerCase() === 'side') ||
+        (c.slug?.toLowerCase() === 'sides') || (c.name?.toLowerCase() === 'sides')
+    );
     CATEGORY_IDS.dinner = dinnerCat?.id || CATEGORY_IDS.dinner;
+    CATEGORY_IDS.side = sideCat?.id || CATEGORY_IDS.side;
 
     const proteinId = id(ROLE_TAGS.protein);
     const starchId  = id(ROLE_TAGS.starch);
@@ -255,7 +260,9 @@ async function getRoleLabeledRecipes() {
 async function getRecipesByTagIds(tagIds) {
     const url = new URL(`${BASE}/api/recipes`);
     for (const id of tagIds) url.searchParams.append('tags', id);
+    // Include both dinner and side categories so we can build complete meals
     if (CATEGORY_IDS.dinner) url.searchParams.append('categories', CATEGORY_IDS.dinner);
+    if (CATEGORY_IDS.side) url.searchParams.append('categories', CATEGORY_IDS.side);
     url.searchParams.set('perPage', '200');
     // Try to include/expand tags if supported (ignored if not)
     url.searchParams.set('include', 'tags');
