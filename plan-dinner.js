@@ -105,7 +105,7 @@ async function main() {
             continue;
         }
 
-        console.log(`[debug] ${date} -> picks:`, chosen.map(item => item.recipeId || item.title));
+        console.log(`[debug] ${date} -> picks:`, chosen.map(item => item.name || item.title));
 
         const roles = new Set();
         for (const item of chosen) {
@@ -116,7 +116,7 @@ async function main() {
 
         for (const item of chosen) {
             if (DRY_RUN) {
-                console.log(`[dry] ${date} dinner ->`, item.recipeId ? `recipeId=${item.recipeId}` : `title=${item.title}`);
+                console.log(`[dry] ${date} dinner ->`, item.recipeId ? item.name : `title=${item.title}`);
             } else {
                 await createMealPlanEntry({
                     date,
@@ -185,7 +185,7 @@ function trySelectCompleteMeal(completePool, recentDinnerRecipeIds) {
     if (candidates.length > 0) {
         const chosen = candidates[0];
         recentDinnerRecipeIds.add(chosen.id);
-        return [{ recipeId: chosen.id }];
+        return [{ recipeId: chosen.id, name: chosen.name }];
     }
     return null;
 }
@@ -234,7 +234,7 @@ function buildMealFromComponents(proteinPool, starchPool, vegPool, recentDinnerR
         for (const recipe of picks) {
             recentDinnerRecipeIds.add(recipe.id);
         }
-        return picks.map(recipe => ({ recipeId: recipe.id }));
+        return picks.map(recipe => ({ recipeId: recipe.id, name: recipe.name }));
     }
 
     return [];
