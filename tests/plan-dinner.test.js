@@ -17,6 +17,8 @@ const {
     byBestScore,
     coveredRoles,
     countIntersect,
+    trySelectCompleteMeal,
+    buildMealFromComponents,
 } = _testExports;
 
 // ============================================================
@@ -286,5 +288,218 @@ describe('byBestScore', () => {
         const b = { roles: new Set(['role:protein']) };
         // Both have gain=1, but b has fewer roles, so a vs b should favor b
         expect(byBestScore(a, b, needed)).toBeGreaterThan(0);
+    });
+});
+
+// ============================================================
+// No-repeat filtering tests (trySelectCompleteMeal)
+// ============================================================
+
+describe('trySelectCompleteMeal', () => {
+    // Helper to create a complete meal recipe (has all 3 roles)
+    const makeCompleteRecipe = (id) => ({
+        id,
+        name: `Complete Meal ${id}`,
+        roles: new Set(['role:protein', 'role:starch', 'role:vegetable']),
+    });
+
+    it('selects a recipe from the complete pool', () => {
+        const pool = [makeCompleteRecipe('recipe-1'), makeCompleteRecipe('recipe-2')];
+        const recentIds = new Set();
+
+        const result = trySelectCompleteMeal(pool, recentIds);
+
+        expect(result).not.toBeNull();
+        expect(result.length).toBe(1);
+        expect(['recipe-1', 'recipe-2']).toContain(result[0].recipeId);
+    });
+
+    it('excludes recipes that are in the recent set', () => {
+        const pool = [
+            makeCompleteRecipe('recent-recipe'),
+            makeCompleteRecipe('fresh-recipe'),
+        ];
+        const recentIds = new Set(['recent-recipe']);
+
+        const result = trySelectCompleteMeal(pool, recentIds);
+
+        expect(result).not.toBeNull();
+        expect(result[0].recipeId).toBe('fresh-recipe');
+    });
+
+    it('returns null when all recipes are recent', () => {
+        const pool = [
+            makeCompleteRecipe('recipe-1'),
+            makeCompleteRecipe('recipe-2'),
+        ];
+        const recentIds = new Set(['recipe-1', 'recipe-2']);
+
+        const result = trySelectCompleteMeal(pool, recentIds);
+
+        expect(result).toBeNull();
+    });
+
+    it('adds selected recipe to the recent set', () => {
+        const pool = [makeCompleteRecipe('recipe-1')];
+        const recentIds = new Set();
+
+        trySelectCompleteMeal(pool, recentIds);
+
+        expect(recentIds.has('recipe-1')).toBe(true);
+    });
+
+    it('returns null for empty pool', () => {
+        const result = trySelectCompleteMeal([], new Set());
+        expect(result).toBeNull();
+    });
+});
+
+// ============================================================
+// No-repeat filtering tests (buildMealFromComponents)
+// ============================================================
+
+describe('buildMealFromComponents', () => {
+    // Helper to create role-specific recipes
+    const makeProtein = (id) => ({
+        id,
+        name: `Protein ${id}`,
+        roles: new Set(['role:protein']),
+    });
+
+    const makeStarch = (id) => ({
+        id,
+        name: `Starch ${id}`,
+        roles: new Set(['role:starch']),
+    });
+
+    const makeVeg = (id) => ({
+        id,
+        name: `Vegetable ${id}`,
+        roles: new Set(['role:vegetable']),
+    });
+
+    it('builds a meal from component recipes', () => {
+        const proteinPool = [makeProtein('p1')];
+        const starchPool = [makeStarch('s1')];
+        const vegPool = [makeVeg('v1')];
+        const recentIds = new Set();
+
+        const result = buildMealFromComponents(proteinPool, starchPool, vegPool, recentIds);
+
+        expect(result.length).toBe(3);
+        const ids = result.map(r => r.recipeId);
+        expect(ids).toContain('p1');
+        expect(ids).toContain('s1');
+        expect(ids).toContain('v1');
+    });
+
+    it('excludes recent recipes from selection', () => {
+        const proteinPool = [makeProtein('p-recent'), makeProtein('p-fresh')];
+        const starchPool = [makeStarch('s1')];
+        const vegPool = [makeVeg('v1')];
+        const recentIds = new Set(['p-recent']);
+
+        const result = buildMealFromComponents(proteinPool, starchPool, vegPool, recentIds);
+
+        const ids = result.map(r => r.recipeId);
+        expect(ids).not.toContain('p-recent');
+        expect(ids).toContain('p-fresh');
+    });
+
+    it('returns empty array when a required role cannot be filled', () => {
+        const proteinPool = [makeProtein('p1')];
+        const starchPool = [makeStarch('s1')];
+        const vegPool = []; // No vegetables available!
+        const recentIds = new Set();
+
+        const result = buildMealFromComponents(proteinPool, starchPool, vegPool, recentIds);
+
+        // Can only cover 2 roles, which meets minimum, but let's test with all recent
+        const proteinPool2 = [makeProtein('p1')];
+        const starchPool2 = [];
+        const vegPool2 = [];
+        const result2 = buildMealFromComponents(proteinPool2, starchPool2, vegPool2, new Set());
+
+        // Only 1 role covered - should return empty
+        expect(result2).toEqual([]);
+    });
+
+    it('adds all selected recipes to the recent set', () => {
+        const proteinPool = [makeProtein('p1')];
+        const starchPool = [makeStarch('s1')];
+        const vegPool = [makeVeg('v1')];
+        const recentIds = new Set();
+
+        buildMealFromComponents(proteinPool, starchPool, vegPool, recentIds);
+
+        expect(recentIds.has('p1')).toBe(true);
+        expect(recentIds.has('s1')).toBe(true);
+        expect(recentIds.has('v1')).toBe(true);
+    });
+
+    it('will not select the same recipe twice even if in multiple pools', () => {
+        // A recipe that has both protein and starch
+        const multiRole = {
+            id: 'multi',
+            name: 'Multi-role dish',
+            roles: new Set(['role:protein', 'role:starch']),
+        };
+        const proteinPool = [multiRole];
+        const starchPool = [multiRole];
+        const vegPool = [makeVeg('v1')];
+        const recentIds = new Set();
+
+        const result = buildMealFromComponents(proteinPool, starchPool, vegPool, recentIds);
+
+        // Should pick the multi-role dish once (covers protein + starch) and veg once
+        expect(result.length).toBe(2);
+        const ids = result.map(r => r.recipeId);
+        expect(ids).toContain('multi');
+        expect(ids).toContain('v1');
+    });
+});
+
+// ============================================================
+// Date window calculation tests (no-repeat lookback)
+// ============================================================
+
+describe('no-repeat date window', () => {
+    it('calculates correct lookback window start', () => {
+        // If planning starts on Jan 20 with 5-day no-repeat,
+        // window should start on Jan 15
+        const startDate = '2025-01-20';
+        const noRepeatDays = 5;
+        const windowStart = offsetDate(startDate, -noRepeatDays);
+
+        expect(windowStart).toBe('2025-01-15');
+    });
+
+    it('lookback window includes enough days', () => {
+        const startDate = '2025-01-20';
+        const noRepeatDays = 7;
+        const windowStart = offsetDate(startDate, -noRepeatDays);
+
+        // Generate the dates in the lookback window
+        const lookbackDates = rangeDays(windowStart, noRepeatDays);
+
+        expect(lookbackDates.length).toBe(7);
+        expect(lookbackDates[0]).toBe('2025-01-13');
+        expect(lookbackDates[6]).toBe('2025-01-19'); // Day before start
+    });
+
+    it('handles month boundary in lookback', () => {
+        const startDate = '2025-02-03';
+        const noRepeatDays = 5;
+        const windowStart = offsetDate(startDate, -noRepeatDays);
+
+        expect(windowStart).toBe('2025-01-29');
+    });
+
+    it('handles year boundary in lookback', () => {
+        const startDate = '2025-01-02';
+        const noRepeatDays = 5;
+        const windowStart = offsetDate(startDate, -noRepeatDays);
+
+        expect(windowStart).toBe('2024-12-28');
     });
 });

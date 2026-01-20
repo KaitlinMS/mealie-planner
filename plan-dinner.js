@@ -875,4 +875,6 @@ export const _testExports = {
     byBestScore,
     coveredRoles,
     countIntersect,
+    trySelectCompleteMeal,
+    buildMealFromComponents,
 };
